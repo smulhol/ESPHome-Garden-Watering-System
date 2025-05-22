@@ -1,5 +1,6 @@
 # Sprinkler Tank.  sprinkler component id = sprinkler_tank
-# This is the Water Tank Controller.
+# This is the Water Tank Area Controller.
+# Target MCU's are "ESP32-C3 Super Mini" or the "ESP32-C3 Mini Pro" with the external antenna.
 
 # Establish Substitutions
 substitutions:
