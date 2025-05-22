@@ -1,0 +1,480 @@
+# Sprinkler Tank.  sprinkler component id = sprinkler_tank
+# This is the Water Tank Controller.
+
+# Establish Substitutions
+substitutions:
+  devicename: sprinkler_tank
+  upper_devicename: "Sprinkler Tank"
+  room: "Garden"
+  zone_1_name: Zone A
+  zone_2_name: Zone B
+  zone_3_name: Zone C
+  zone_4_name: Zone D
+  software_version: 20250522_V03
+  sensor_update_frequency: 10s
+  log_level: info # Enable levels logging https://esphome.io/components/logger.html
+  # none, error, warn, info, debug (default), verbose, very_verbose
+  zone_1_valve_id: valve_0
+  zone_2_valve_id: valve_1
+  zone_3_valve_id: valve_2
+  zone_4_valve_id: valve_3  #Zone 4 Valve 3 has been hashed out until needed
+  esphome_name: "sprinkler-tank"
+  esphome_board: esp32-c3-devkitm-1
+  esphome_comment: Water Tank Sprinkler Controller
+  esphome_project_name: "Sprinkler Tank"
+  esphome_project_version: $software_version
+  uom: Min # this overrides the uom in sprinkler -> run_duration
+  esp32_framework: arduino   # esp-idf or arduino
+
+esphome:
+  name: $esphome_name
+  friendly_name: $upper_devicename
+  comment: $esphome_comment
+  area: $room
+  on_boot:
+    priority: -100
+    then:
+      # Set default state for Valve Status
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "Idle"
+      - text_sensor.template.publish:
+          id: sprinkler_status
+          state: "Idle"
+      # Set multiplier to 60, convert seconds to minutes
+      - sprinkler.set_multiplier:
+          id: $devicename
+          multiplier: 60
+
+esp32:
+  board: $esphome_board
+  framework:
+    type: $esp32_framework
+
+# Enable logging
+logger:
+  level: ${log_level}
+  logs:
+    text_sensor: WARN
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "lmcaaYYtfPltiP5ViqiKQ4PHyb3rEObmA3ZeQriVU0E="
+
+ota:
+  - platform: esphome
+    password: "bd033fb8e8c0be57a535374331ac5293"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Output power.  8.5db to 20.5db (0.5 step) ESP32=20db max.
+  output_power: 20dB  #use 8.5dB for close to router testing.  
+  manual_ip:
+    static_ip: 192.168.1.208
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Sprinkler-1 Fallback Hotspot"
+    password: "B41qaWExq6jX"
+
+captive_portal:
+    
+# Enable Web server.
+web_server:
+  port: 80
+
+# Sync time with Home Assistant.
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+###############################################
+# Text sensors with general information.
+###############################################
+
+text_sensor:
+  # Expose ESPHome version as sensor.
+  - platform: version 
+    name: $esphome_name ESPHome Version
+    hide_timestamp: false
+  # Expose WiFi information 
+  - platform: wifi_info
+    ip_address:
+      name: "$esphome_name IP"
+    ssid:
+      name: "$esphome_name SSID"
+    mac_address:
+      name: "$esphome_name MAC"
+
+  # Expose Time Remaining as a sensor.
+  - platform: template
+    id: time_remaining
+    name: Time Remaining
+    update_interval: $sensor_update_frequency
+    icon: "mdi:timer-sand"
+    lambda: |-
+      int seconds = round(id($devicename).time_remaining_active_valve().value_or(0));
+      int days = seconds / (24 * 3600);
+      seconds = seconds % (24 * 3600);
+      int hours = seconds / 3600;
+      seconds = seconds % 3600;
+      int minutes = seconds /  60;
+      seconds = seconds % 60;
+        return {
+          ((days ? String(days) + "d " : "") + 
+          (hours ? String(hours) + "h " : "") +
+          (minutes ? String(minutes) + "m " : "") +
+          (String(seconds) + "s")).c_str()};
+  # Expose Progress Percent as a sensor.
+  - platform: template
+    id: progress_percent
+    name: Progress %
+    update_interval: $sensor_update_frequency
+    icon: "mdi:progress-clock"
+    lambda: |-
+      int progress_percent = round(((id($devicename).valve_run_duration_adjusted(id($devicename).active_valve().value_or(0)) - id($devicename).time_remaining_active_valve().value_or(0)) * 100 / id($devicename).valve_run_duration_adjusted(id($devicename).active_valve().value_or(0))));
+      std::string progress_percent_as_string = std::to_string(progress_percent);
+      return progress_percent_as_string +"%";
+  
+  # Expose Valve Status as a sensor.
+  - platform: template
+    id: valve_status
+    name: Valve Status
+    update_interval: never
+    icon: "mdi:information-variant"
+  
+  # Expose Sprinkler Status as a sensor.
+  - platform: template
+    id: sprinkler_status
+    name: Sprinkler Status
+    update_interval: never
+    icon: "mdi:information-variant"
+
+  # Expose the board type as a sensor
+  - platform: template 
+    id: espboard_type
+    icon: "mdi:developer-board"
+    name: ESPBoard
+    lambda: |-
+      return to_string("${esphome_board}");
+
+output:
+  # output entity internal to esphome device only, not exposed.
+  # Status LED - blinks when sprinkler main switch is ON
+  - platform: gpio
+    pin:
+      number: GPIO5
+      mode: output
+    id: statusLED
+
+  # 4th relay used to control power to the water pump.
+  - platform: gpio
+    pin: GPIO0
+    id: relay_pump
+    inverted: true
+
+interval:
+  - interval: 500ms
+    then:
+      - if:
+          condition:
+            switch.is_on: main_switch
+          then:
+            - output.turn_on: statusLED
+            - delay: 250ms
+            - output.turn_off: statusLED
+
+
+sensor:
+  # Uptime sensor.
+  - platform: uptime
+    name: Uptime
+
+  # WiFi Signal sensor.
+  - platform: wifi_signal
+    name: WiFi Signal
+    update_interval: 60s
+
+###############################################
+# Configuration to set multiplier via number 
+############################################### 
+number:
+  - platform: template
+    id: $zone_1_valve_id
+    name: $zone_1_name
+    min_value: 1
+    max_value: 60
+    step: 1
+    unit_of_measurement: $uom
+    icon: "mdi:timer-outline"
+    mode: box # Defines how the number should be displayed in the UI
+    lambda: "return id($devicename).valve_run_duration(0);"
+    set_action:
+      - sprinkler.set_valve_run_duration:
+          id: $devicename
+          valve_number: 0
+          run_duration: !lambda 'return x;'
+
+  - platform: template
+    id: $zone_2_valve_id
+    name: $zone_2_name
+    min_value: 1
+    max_value: 60
+    step: 1
+    unit_of_measurement: $uom
+    icon: "mdi:timer-outline"
+    mode: box # Defines how the number should be displayed in the UI
+    lambda: "return id($devicename).valve_run_duration(1);"
+    set_action:
+      - sprinkler.set_valve_run_duration:
+          id: $devicename
+          valve_number: 1
+          run_duration: !lambda 'return x;'
+
+  - platform: template
+    id: $zone_3_valve_id
+    name: $zone_3_name
+    min_value: 1
+    max_value: 60
+    step: 1
+    unit_of_measurement: $uom
+    icon: "mdi:timer-outline"
+    mode: box # Defines how the number should be displayed in the UI
+    lambda: "return id($devicename).valve_run_duration(2);"
+    set_action:
+      - sprinkler.set_valve_run_duration:
+          id: $devicename
+          valve_number: 2
+          run_duration: !lambda 'return x;'
+
+
+  - platform: template
+    id: sprinkler_ctrlr_repeat_cycles
+    name: "Sprinkler Repeat Cycles"
+    min_value: 0
+    max_value: 4
+    step: 1
+    mode: box
+    icon: "mdi:water-sync"
+    lambda: "return id($devicename).repeat();"
+    set_action:
+      - sprinkler.set_repeat:
+          id: $devicename
+          repeat: !lambda 'return x;'
+
+###############################################
+# Main Sprinkler Controller
+###############################################
+sprinkler:
+  - id: $devicename
+    main_switch:
+      name: "Main Switch"
+      id: main_switch
+      on_turn_on: 
+        - text_sensor.template.publish:
+            id: sprinkler_status
+            state: "$devicename Active"
+      on_turn_off:
+        - text_sensor.template.publish:
+            id: sprinkler_status
+            state: "$devicename Idle"
+              
+    auto_advance_switch: "Auto Advance"
+    valve_overlap: 5s
+    repeat_number: "Repeat"
+    valves:
+      - valve_switch: $zone_1_name
+        enable_switch: Enable $zone_1_name
+        run_duration: 10s
+        valve_switch_id: ${devicename}_1
+      - valve_switch: $zone_2_name
+        enable_switch: Enable $zone_2_name
+        run_duration: 10s
+        valve_switch_id: ${devicename}_2
+      - valve_switch: $zone_3_name
+        enable_switch: Enable $zone_3_name
+        run_duration: 06s
+        valve_switch_id: ${devicename}_3
+
+# HASS UI Control Button
+#button:
+#  - platform: template
+#    id: sprinkler_pause
+#    name: "Pause"
+#    icon: "mdi:pause"
+#    on_press:
+#      then:
+#        - text_sensor.template.publish:
+#            id: valve_status
+#            state: "Paused"
+#        - sprinkler.pause: $devicename
+
+####################################################
+# Switch Control to restart the irrigation system.   
+####################################################
+switch:
+  - platform: restart
+    name: "Restart $devicename"
+
+####################################################
+# Hidden I/O  Switches to control irrigation valve relays
+####################################################
+  - platform: gpio
+    name: Relay Board Pin IN4
+    restore_mode: RESTORE_DEFAULT_OFF # Prevents GPIO pin from going high during boot
+    internal: true # Prevents GPIO switch NAME from showing up in Home Assistant
+    id: ${devicename}_1
+    on_turn_on:
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "$zone_1_name Active"
+    on_turn_off:
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "Idle"
+    pin: GPIO3
+    inverted: true  #Sets GPIO LOW to turn ON the relay/solenoid.
+
+  - platform: gpio
+    name: Relay Board Pin IN3
+    restore_mode: RESTORE_DEFAULT_OFF 
+    internal: true 
+    id: ${devicename}_2
+    on_turn_on:
+      - delay: 6s
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "$zone_2_name Active"
+    on_turn_off:
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "Idle"
+    pin: GPIO2
+    inverted: true
+
+  - platform: gpio
+    name: Relay Board Pin IN2
+    restore_mode: RESTORE_DEFAULT_OFF 
+    internal: true 
+    id: ${devicename}_3
+    on_turn_on:
+      - delay: 6s
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "$zone_3_name Active"
+    on_turn_off:
+      - text_sensor.template.publish:
+          id: valve_status
+          state: "Idle"
+    pin: GPIO1
+    inverted: true
+
+  
+  # switch:  When turned "On" the relay is enabled cutting power to the water pump.
+  - platform: output
+    name: "Water Pump Control"
+    id: water_pump_control
+    output: relay_pump
+
+  # switch: UI exposed switch to provide a way to turn on the water pump even if the water is low.
+  - platform: template
+    name: "Water Pump Override"
+    id: water_pump_override_switch 
+    icon: mdi:water-pump-off 
+    optimistic: true # This is a good practice for template switches that don't have immediate hardware feedback
+    restore_mode: RESTORE_DEFAULT_OFF 
+    on_turn_on:
+      - if:
+          condition:
+            binary_sensor.is_on: water_tank_low_level
+          then:
+            - output.turn_off: relay_pump
+    on_turn_off:
+      - if:
+          condition:
+            binary_sensor.is_on: water_tank_low_level
+          then:
+            - output.turn_on: relay_pump
+
+# Define the input switches
+binary_sensor:
+  # binary_sensor for Button 1 (Start Local Zone Watering)
+  - platform: gpio
+    pin:
+      number: GPIO8
+      mode: INPUT_PULLUP
+    name: "SW1-Manual Watering Button"
+    id: sw1_manual_watering_button
+    on_press:
+      - switch.toggle: main_switch
+    filters:
+      - delayed_on: 50ms # Software debounce
+    internal: True
+  
+  # binary_sensor for Button 2 (Stop All Watering)
+  - platform: gpio
+    pin:
+      number: GPIO9
+      mode: INPUT_PULLUP
+    name: "SW2 Stop All Watering Button"
+    id: sw2_stop_all_watering_button
+    filters:
+      - delayed_on: 50ms # Software debounce
+    on_press:
+      - homeassistant.service:
+          service: switch.turn_off # Turns OFF the other controller's main_switch
+          data:
+            entity_id: switch.sprinkler_bath_main_switch
+      - switch.turn_off: main_switch # Turns OFF the local Sprinkler component
+      - homeassistant.service:
+          service: input_boolean.turn_off # Turns OFF the master watering switch in HA
+          data:
+            entity_id: input_boolean.full_garden_watering_master
+    internal: True
+  
+  # binary_sensor for Button 3 (Start Full Garden Watering Sequence)
+  - platform: gpio
+    pin:
+      number: GPIO10
+      mode: INPUT_PULLUP
+    name: "SW3 Full Garden Watering Button"
+    id: sw3_full_garden_watering_button
+    on_press:
+      - homeassistant.service:
+          service: switch.turn_off # Turns OFF the other controller's main_switch
+          data:
+            entity_id: switch.sprinkler_bath_main_switch
+      - switch.turn_off: main_switch # Turns OFF the local Sprinkler component
+      - homeassistant.service:
+          service: input_boolean.turn_on # Turns ON the master watering switch in HA
+          data:
+            entity_id: input_boolean.full_garden_watering_master
+    filters:
+      - delayed_on: 50ms # Software debounce
+    internal: True
+
+  # Water tank float swich. On = water low.
+  - platform: gpio
+    pin:
+      number: GPIO4
+      mode: INPUT_PULLDOWN
+    name: "Water Tank Low Level"
+    id: water_tank_low_level
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+    on_press:
+      - if:
+          condition: # only turn off the water pump if override is Off.
+            switch.is_off: water_pump_override_switch
+          then:
+            - output.turn_on: relay_pump
+          else:
+            - output.turn_off: relay_pump
+    on_release:
+      - output.turn_off: relay_pump  
+
