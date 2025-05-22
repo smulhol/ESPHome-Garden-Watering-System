@@ -1,7 +1,8 @@
 # Sprinkler-bath.yaml = Sprinkler Bath Controller
-# This is the Bathtub controller.
+# This is the Bathtub area controller.
 # Currently controlling 3 solenoid valves and has 1 spare unused relay.
-# MCU converted to the ESP32-C3 Mini Pro with the external antenna.
+# Target MCU's are "ESP32-C3 Super Mini" or the "ESP32-C3 Mini Pro" with the external antenna.
+
 # Establish Substitutions
 substitutions:
   devicename: sprinkler_bath
