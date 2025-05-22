@@ -1,0 +1,22 @@
+alias: Full Garden Watering All Stop
+description: Stop All Sprinklers
+triggers:
+  - trigger: state
+    entity_id:
+      - input_boolean.full_garden_watering_master
+    to: "off"
+conditions: []
+actions:
+  - action: switch.turn_off
+    metadata: {}
+    data: {}
+    target:
+      area_id: garden
+      entity_id: switch.sprinkler_bath_main_switch
+  - action: switch.turn_off
+    metadata: {}
+    data: {}
+    target:
+      area_id: garden
+      entity_id: switch.sprinkler_tank_main_switch
+mode: single

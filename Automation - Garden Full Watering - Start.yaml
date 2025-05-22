@@ -1,0 +1,42 @@
+alias: Full Garden Watering Sequence Start
+description: Coordinates sprinkler_bath and sprinkler_tank in sequence
+triggers:
+  - entity_id:
+      - input_boolean.full_garden_watering_master
+    to: "on"
+    trigger: state
+conditions: []
+actions:
+  - if:
+      - condition: state
+        entity_id: switch.sprinkler_tank_main_switch
+        state: "off"
+      - condition: state
+        entity_id: switch.sprinkler_bath_main_switch
+        state: "off"
+    then:
+      - target:
+          entity_id: switch.sprinkler_bath_main_switch
+        action: switch.turn_on
+        data: {}
+      - wait_for_trigger:
+          - entity_id: switch.sprinkler_bath_main_switch
+            to: "off"
+            trigger: state
+        timeout: "00:30:00"
+        continue_on_timeout: true
+      - target:
+          entity_id: switch.sprinkler_tank_main_switch
+        action: switch.turn_on
+        data: {}
+      - wait_for_trigger:
+          - entity_id: switch.sprinkler_tank_main_switch
+            to: "off"
+            trigger: state
+        timeout: "00:30:00"
+        continue_on_timeout: true
+      - target:
+          entity_id: input_boolean.full_garden_watering_master
+        action: input_boolean.turn_off
+        data: {}
+mode: single
