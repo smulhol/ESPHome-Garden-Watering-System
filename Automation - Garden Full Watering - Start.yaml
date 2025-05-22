@@ -1,3 +1,5 @@
+# Home Assistant Automation UI Yaml code
+# Requires a Toggle Helper (input_boolean.full_garden_watering_master) to be created as a flag
 alias: Full Garden Watering Sequence Start
 description: Coordinates sprinkler_bath and sprinkler_tank in sequence
 triggers:
