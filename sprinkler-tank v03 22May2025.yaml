@@ -1,6 +1,10 @@
 # Sprinkler Tank.  sprinkler component id = sprinkler_tank
 # This is the Water Tank Area Controller.
 # Target MCU's are "ESP32-C3 Super Mini" or the "ESP32-C3 Mini Pro" with the external antenna.
+# The controller drives a 4 relay board.
+# This controls 2 solenoid valves and a spare relay for a future valve
+# The water tank level monitor float switch is connected to an input GPIO
+# When the water is low the 4th relay is turned ON and cuts power to the water pump.
 
 # Establish Substitutions
 substitutions:
