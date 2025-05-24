@@ -16,7 +16,7 @@ substitutions:
   zone_3_name: Zone C
   zone_4_name: Zone D
   software_version: 20250522_V03
-  sensor_update_frequency: 10s
+  sensor_update_frequency: 5s
   log_level: info # Enable levels logging https://esphome.io/components/logger.html
   # none, error, warn, info, debug (default), verbose, very_verbose
   zone_1_valve_id: valve_0
